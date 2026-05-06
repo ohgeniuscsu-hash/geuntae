@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>근태관리</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 2rem 1rem; }
+  .card { background: #fff; border-radius: 16px; padding: 2rem; width: 100%; max-width: 480px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; color: #111; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 1.5rem; }
+  .section-label { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 8px; letter-spacing: 0.5px; }
+  .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1.5rem; }
+  .type-btn { border: 1.5px solid #e0e0e0; border-radius: 10px; padding: 12px 6px; background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.15s; }
+  .type-btn:hover { border-color: #aaa; background: #f9f9f9; }
+  .type-btn.selected { border-color: #4A90D9; background: #EBF3FC; }
+  .type-btn .label { font-size: 13px; font-weight: 600; color: #222; }
+  .type-btn .sub { font-size: 11px; color: #999; }
+  .type-btn.selected .label { color: #1a5fa8; }
+  .field { margin-bottom: 1rem; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; }
+  .field input, .field select, .field textarea { width: 100%; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 10px 12px; font-size: 14px; color: #222; background: #fff; font-family: inherit; transition: border-color 0.15s; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #4A90D9; }
+  .field textarea { resize: none; height: 70px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hours-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .hour-btn { border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 8px 16px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 500; color: #444; transition: all 0.15s; }
+  .hour-btn:hover { border-color: #aaa; }
+  .hour-btn.selected { border-color: #4A90D9; background: #EBF3FC; color: #1a5fa8; }
+  .submit-btn { width: 100%; padding: 13px; border-radius: 10px; border: none; background: #222; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 0.5rem; transition: background 0.15s; }
+  .submit-btn:hover { background: #444; }
+  .submit-btn:disabled { background: #aaa; cursor: not-allowed; }
+  .divider { border: none; border-top: 1px solid #f0f0f0; margin: 1.25rem 0; }
+  .result { margin-top: 1rem; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; display: none; white-space: pre-line; }
+  .result.success { background: #e6f4ea; color: #1e7e34; }
+  .result.error { background: #fdecea; color: #c0392b; }
+  .loading { display: none; text-align: center; color: #888; font-size: 13px; margin-top: 10px; }
+  .config-section { background: #f9f9f9; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; border: 1.5px solid #e0e0e0; }
+  .config-section .field { margin-bottom: 0.5rem; }
+  .config-section .field:last-child { margin-bottom: 0; }
+  .config-toggle { font-size: 12px; color: #4A90D9; cursor: pointer; margin-bottom: 1rem; display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>근태 입력</h1>
+  <p class="subtitle">오프로님 연가 · 대체휴무 기록</p>
+
+  <span class="config-toggle" onclick="toggleConfig()">⚙️ 설정</span>
+  <div id="config-section" class="config-section" style="display:none">
+    <div class="field">
+      <label>노션 API 토큰</label>
+      <input type="password" id="notion-token" placeholder="ntn_xxx...">
+    </div>
+    <div class="field">
+      <label>Google Apps Script URL</label>
+      <input type="text" id="gas-url" placeholder="https://script.google.com/...">
+    </div>
+    <button onclick="saveConfig()" style="margin-top:8px; padding:8px 16px; border-radius:8px; border:none; background:#222; color:#fff; font-size:13px; cursor:pointer;">저장</button>
+    <span id="config-saved" style="font-size:12px; color:green; margin-left:8px; display:none">저장됨 ✓</span>
+  </div>
+
+  <div class="section-label">근태 종류</div>
+  <div class="type-grid">
+    <button class="type-btn" data-type="지참" data-hours="3" data-category="대체휴무" onclick="selectType(this)">
+      <span class="label">지참</span><span class="sub">오전 3h</span>
+    </button>
+    <button class="type-btn" data-type="조퇴" data-hours="1" data-category="대체휴무" onclick="selectType(this)">
+      <span class="label">조퇴</span><span class="sub">1h~</span>
+    </button>
+    <button class="type-btn" data-type="외출" data-hours="1" data-category="대체휴무" onclick="selectType(this)">
+      <span class="label">외출</span><span class="sub">1h~</span>
+    </button>
+    <button class="type-btn" data-type="연가(반차)" data-hours="4" data-category="연가" onclick="selectType(this)">
+      <span class="label">연가 반차</span><span class="sub">4h</span>
+    </button>
+    <button class="type-btn" data-type="연가(종일)" data-hours="8" data-category="연가" onclick="selectType(this)">
+      <span class="label">연가 종일</span><span class="sub">8h</span>
+    </button>
+    <button class="type-btn" data-type="대체휴무" data-hours="8" data-category="대체휴무" onclick="selectType(this)">
+      <span class="label">대체휴무</span><span class="sub">자유설정</span>
+    </button>
+  </div>
+
+  <div id="hours-section" style="display:none">
+    <div class="section-label">시간</div>
+    <div class="hours-row" id="hours-row"></div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="row">
+    <div class="field">
+      <label>날짜</label>
+      <input type="date" id="date-input">
+    </div>
+    <div class="field">
+      <label>구분</label>
+      <select id="category-input">
+        <option value="대체휴무">대체휴무</option>
+        <option value="연가">연가</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>사유 (선택)</label>
+    <textarea id="reason-input" placeholder="개인사유, 병원, 가족행사 등"></textarea>
+  </div>
+
+  <button class="submit-btn" id="submit-btn" onclick="submitForm()">기록하기</button>
+  <div class="loading" id="loading">⏳ 노션 · 캘린더에 기록 중...</div>
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+const DAECHEHYUMU_DB = '80474216-dacb-493e-b4ac-b77a5d07a67d';
+const YEONGA_DB = '4baef3a8-6e35-4cef-98cc-36c1f0c09825';
+
+var selectedType = null;
+var selectedHours = null;
+
+// 오늘 날짜
+var today = new Date();
+document.getElementById('date-input').value = today.toISOString().split('T')[0];
+
+// 설정 로드
+function loadConfig() {
+  var token = localStorage.getItem('notion_token') || '';
+  var gasUrl = localStorage.getItem('gas_url') || '';
+  document.getElementById('notion-token').value = token;
+  document.getElementById('gas-url').value = gasUrl;
+}
+function saveConfig() {
+  localStorage.setItem('notion_token', document.getElementById('notion-token').value.trim());
+  localStorage.setItem('gas_url', document.getElementById('gas-url').value.trim());
+  document.getElementById('config-saved').style.display = 'inline';
+  setTimeout(() => document.getElementById('config-saved').style.display = 'none', 2000);
+}
+function toggleConfig() {
+  var s = document.getElementById('config-section');
+  s.style.display = s.style.display === 'none' ? 'block' : 'none';
+}
+loadConfig();
+
+function selectType(btn) {
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedType = btn.dataset.type;
+  var defaultHours = parseInt(btn.dataset.hours);
+  document.getElementById('category-input').value = btn.dataset.category;
+  var hoursSection = document.getElementById('hours-section');
+  if (['지참','연가(반차)','연가(종일)'].includes(selectedType)) {
+    hoursSection.style.display = 'none';
+    selectedHours = defaultHours;
+  } else {
+    hoursSection.style.display = 'block';
+    renderHours(selectedType, defaultHours);
+  }
+}
+
+function renderHours(type, defaultH) {
+  var row = document.getElementById('hours-row');
+  row.innerHTML = '';
+  var options = type === '대체휴무' ? [4,8] : [1,2,3,4];
+  selectedHours = defaultH;
+  options.forEach(h => {
+    var btn = document.createElement('button');
+    btn.className = 'hour-btn' + (h === defaultH ? ' selected' : '');
+    btn.textContent = h + 'h';
+    btn.onclick = () => {
+      document.querySelectorAll('.hour-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedHours = h;
+    };
+    row.appendChild(btn);
+  });
+  var customBtn = document.createElement('button');
+  customBtn.className = 'hour-btn';
+  customBtn.textContent = '직접입력';
+  customBtn.onclick = () => {
+    var val = prompt('시간을 입력하세요 (숫자)');
+    if (val && !isNaN(val)) {
+      document.querySelectorAll('.hour-btn').forEach(b => b.classList.remove('selected'));
+      customBtn.classList.add('selected');
+      customBtn.textContent = val + 'h';
+      selectedHours = parseFloat(val);
+    }
+  };
+  row.appendChild(customBtn);
+}
+
+async function submitForm() {
+  var NOTION_TOKEN = localStorage.getItem('notion_token');
+  var GAS_URL = localStorage.getItem('gas_url');
+  if (!NOTION_TOKEN || !GAS_URL) { alert('⚙️ 설정에서 노션 토큰과 GAS URL을 먼저 입력해주세요.'); toggleConfig(); return; }
+  if (!selectedType) { alert('근태 종류를 선택해주세요.'); return; }
+  var date = document.getElementById('date-input').value;
+  if (!date) { alert('날짜를 선택해주세요.'); return; }
+
+  var category = document.getElementById('category-input').value;
+  var reason = document.getElementById('reason-input').value.trim() || '개인사유';
+  var hours = selectedHours || 0;
+
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('result').style.display = 'none';
+
+  try {
+    var dbId = category === '연가' ? YEONGA_DB : DAECHEHYUMU_DB;
+    var notionProps = category === '연가'
+      ? { '내용':{title:[{text:{content:selectedType}}]}, '날짜':{date:{start:date}}, '유형':{select:{name:'연가'}}, '시간':{number:hours}, '사유':{rich_text:[{text:{content:reason}}]}, '소진구분':{select:{name:'2026신규분'}} }
+      : { '내용':{title:[{text:{content:selectedType}}]}, '날짜':{date:{start:date}}, '구분':{select:{name:'사용'}}, '시간':{number:hours}, '사유':{rich_text:[{text:{content:reason}}]} };
+
+    var notionRes = await fetch('https://api.notion.com/v1/pages', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + NOTION_TOKEN, 'Content-Type': 'application/json', 'Notion-Version': '2022-06-28' },
+      body: JSON.stringify({ parent:{database_id:dbId}, properties:notionProps })
+    });
+    if (!notionRes.ok) throw new Error('노션 등록 실패 (' + notionRes.status + ')');
+
+    var calData = { title: selectedType + ' (' + reason + ')', description: selectedType + ' ' + hours + 'h (' + reason + ')', allDay: true, date: date + 'T00:00:00' };
+    if (selectedType === '지참') { calData.allDay=false; calData.startTime=date+'T09:00:00+09:00'; calData.endTime=date+'T12:00:00+09:00'; }
+    else if (selectedType==='조퇴'||selectedType==='외출') { calData.allDay=false; calData.startTime=date+'T17:00:00+09:00'; calData.endTime=date+'T'+String(17+hours).padStart(2,'0')+':00:00+09:00'; }
+
+    await fetch(GAS_URL, { method:'POST', body:JSON.stringify(calData) });
+
+    showResult(true, '✅ ' + selectedType + ' ' + hours + 'h 등록 완료!\n노션과 캘린더에 기록되었습니다.');
+  } catch(err) {
+    showResult(false, '❌ 오류: ' + err.message);
+  }
+  document.getElementById('submit-btn').disabled = false;
+  document.getElementById('loading').style.display = 'none';
+}
+
+function showResult(success, msg) {
+  var el = document.getElementById('result');
+  el.className = 'result ' + (success ? 'success' : 'error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+</script>
+</body>
+</html>
