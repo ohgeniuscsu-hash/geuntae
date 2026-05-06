@@ -10,13 +10,9 @@
   .card { background: #fff; border-radius: 16px; padding: 2rem; width: 100%; max-width: 480px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; color: #111; }
   .subtitle { font-size: 13px; color: #888; margin-bottom: 1.5rem; }
-
-  /* 탭 */
   .tabs { display: flex; gap: 4px; background: #f5f5f5; border-radius: 10px; padding: 4px; margin-bottom: 1.5rem; }
   .tab-btn { flex: 1; padding: 8px; border: none; border-radius: 8px; background: transparent; font-size: 13px; font-weight: 600; color: #888; cursor: pointer; transition: all 0.15s; font-family: inherit; }
   .tab-btn.active { background: #fff; color: #111; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-
-  /* 현황 */
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1.5rem; }
   .stat-card { border-radius: 12px; padding: 1.2rem; border: 1.5px solid #e0e0e0; }
   .stat-card.yeonga { border-color: #b3d4f5; background: #EBF3FC; }
@@ -28,8 +24,6 @@
   .refresh-btn { width: 100%; padding: 10px; border-radius: 10px; border: 1.5px solid #e0e0e0; background: #fff; font-size: 13px; font-weight: 500; color: #666; cursor: pointer; font-family: inherit; margin-bottom: 1rem; transition: all 0.15s; }
   .refresh-btn:hover { border-color: #aaa; }
   .updated { font-size: 11px; color: #bbb; text-align: right; margin-top: 0.5rem; }
-
-  /* 입력 */
   .section-label { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 8px; }
   .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1.5rem; }
   .type-btn { border: 1.5px solid #e0e0e0; border-radius: 10px; padding: 12px 6px; background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.15s; }
@@ -57,10 +51,7 @@
   .result.error { background: #fdecea; color: #c0392b; }
   .loading-msg { display: none; text-align: center; color: #888; font-size: 13px; margin-top: 10px; }
   .loading { text-align: center; color: #aaa; font-size: 13px; padding: 2rem 0; }
-
-  /* 설정 */
-  .config-toggle { font-size: 12px; color: #4A90D9; cursor: pointer; margin-bottom: 1rem; display: block; }
-  .config-section { background: #f9f9f9; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; border: 1.5px solid #e0e0e0; }
+  .warn-box { background: #fff3cd; color: #856404; border-radius: 8px; padding: 12px; font-size: 13px; margin-bottom: 1rem; }
 </style>
 </head>
 <body>
@@ -137,16 +128,13 @@
       <label>노션 API 토큰</label>
       <input type="password" id="notion-token" placeholder="ntn_xxx...">
     </div>
-    <div class="field">
-      <label>Google Apps Script URL</label>
-      <input type="text" id="gas-url" placeholder="https://script.google.com/...">
-    </div>
     <button onclick="saveConfig()" style="width:100%; padding:11px; border-radius:10px; border:none; background:#222; color:#fff; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit;">저장</button>
     <p id="config-saved" style="font-size:12px; color:green; text-align:center; margin-top:8px; display:none">저장 완료! ✓</p>
   </div>
 </div>
 
 <script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzbGB4Zbmu7p_GiX1jwM4_EMJay9ftLZJepzkkAXdSn630aGxhSwIsTWkVYdExJPfJO/exec';
 const YEONGA_DB = '4baef3a8-6e35-4cef-98cc-36c1f0c09825';
 const DAECHAE_DB = '80474216-dacb-493e-b4ac-b77a5d07a67d';
 
@@ -155,14 +143,11 @@ var selectedHours = null;
 var today = new Date();
 document.getElementById('date-input').value = today.toISOString().split('T')[0];
 
-// 설정 로드
 function loadConfig() {
   document.getElementById('notion-token').value = localStorage.getItem('notion_token') || '';
-  document.getElementById('gas-url').value = localStorage.getItem('gas_url') || '';
 }
 function saveConfig() {
   localStorage.setItem('notion_token', document.getElementById('notion-token').value.trim());
-  localStorage.setItem('gas_url', document.getElementById('gas-url').value.trim());
   var el = document.getElementById('config-saved');
   el.style.display = 'block';
   setTimeout(() => el.style.display = 'none', 2000);
@@ -170,7 +155,6 @@ function saveConfig() {
 }
 loadConfig();
 
-// 탭 전환
 function switchTab(tab) {
   ['status','input','config'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t === tab ? 'block' : 'none';
@@ -181,14 +165,14 @@ function switchTab(tab) {
   if (tab === 'status') loadStatus();
 }
 
-// 현황 조회
-async function queryDB(dbId, token) {
-  var res = await fetch('https://api.notion.com/v1/databases/' + dbId + '/query', {
+async function queryNotion(dbId) {
+  var token = localStorage.getItem('notion_token');
+  if (!token) throw new Error('no_token');
+  var res = await fetch(GAS_URL, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Notion-Version': '2022-06-28' },
-    body: JSON.stringify({ page_size: 100 })
+    body: JSON.stringify({ action: 'query_notion', token: token, dbId: dbId })
   });
-  if (!res.ok) throw new Error('노션 조회 실패 (' + res.status + ')');
+  if (!res.ok) throw new Error('조회 실패');
   return res.json();
 }
 
@@ -203,14 +187,14 @@ function toDetail(hours) {
 async function loadStatus() {
   var token = localStorage.getItem('notion_token');
   if (!token) {
-    document.getElementById('status-content').innerHTML = '<div style="background:#fff3cd;color:#856404;border-radius:8px;padding:12px;font-size:13px;">⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.</div>';
+    document.getElementById('status-content').innerHTML = '<div class="warn-box">⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.</div>';
     return;
   }
   document.getElementById('status-content').innerHTML = '<div class="loading">불러오는 중...</div>';
   try {
     var [yeongaData, daechaeData] = await Promise.all([
-      queryDB(YEONGA_DB, token),
-      queryDB(DAECHAE_DB, token)
+      queryNotion(YEONGA_DB),
+      queryNotion(DAECHAE_DB)
     ]);
     var yeongaTotal = 0;
     yeongaData.results.forEach(p => {
@@ -244,11 +228,14 @@ async function loadStatus() {
       </div>`;
     document.getElementById('updated').textContent = '마지막 업데이트: ' + new Date().toLocaleString('ko-KR');
   } catch(err) {
-    document.getElementById('status-content').innerHTML = '<div style="background:#fdecea;color:#c0392b;border-radius:8px;padding:12px;font-size:13px;">❌ ' + err.message + '</div>';
+    if (err.message === 'no_token') {
+      document.getElementById('status-content').innerHTML = '<div class="warn-box">⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.</div>';
+    } else {
+      document.getElementById('status-content').innerHTML = '<div class="result error" style="display:block">❌ ' + err.message + '</div>';
+    }
   }
 }
 
-// 근태 입력
 function selectType(btn) {
   document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -298,8 +285,7 @@ function renderHours(type, defaultH) {
 
 async function submitForm() {
   var NOTION_TOKEN = localStorage.getItem('notion_token');
-  var GAS_URL = localStorage.getItem('gas_url');
-  if (!NOTION_TOKEN || !GAS_URL) { alert('⚙️ 설정 탭에서 노션 토큰과 GAS URL을 먼저 입력해주세요.'); switchTab('config'); return; }
+  if (!NOTION_TOKEN) { alert('⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.'); switchTab('config'); return; }
   if (!selectedType) { alert('근태 종류를 선택해주세요.'); return; }
   var date = document.getElementById('date-input').value;
   if (!date) { alert('날짜를 선택해주세요.'); return; }
