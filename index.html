@@ -97,13 +97,11 @@
     </div>
 
     <div id="input-fields" style="display:none">
-      <!-- 날짜 -->
       <div class="field">
         <label>날짜</label>
         <input type="date" id="date-input">
       </div>
 
-      <!-- 지참: 시간 선택 -->
       <div id="jicham-hours" style="display:none">
         <div class="section-label">시간 (기본 3h)</div>
         <div class="hours-row" id="jicham-hours-row"></div>
@@ -119,7 +117,6 @@
         </div>
       </div>
 
-      <!-- 조퇴: 시작시각 → 퇴근시각 자동 -->
       <div id="jotoe-fields" style="display:none">
         <div class="info-box" id="jotoe-info"></div>
         <div class="row">
@@ -135,7 +132,6 @@
         <div class="calc-result" id="jotoe-calc"></div>
       </div>
 
-      <!-- 외출: 시작~종료 직접 -->
       <div id="oechul-fields" style="display:none">
         <div class="row">
           <div class="field">
@@ -150,16 +146,14 @@
         <div class="calc-result" id="oechul-calc"></div>
       </div>
 
-      <!-- 구분 (연가/대체휴무) -->
       <div class="field" id="category-field">
         <label>구분 (차감 방식)</label>
-        <select id="category-input" onchange="updateCategoryInfo()">
+        <select id="category-input">
           <option value="대체휴무">대체휴무로 차감</option>
           <option value="연가">연가로 차감</option>
         </select>
       </div>
 
-      <!-- 사유 -->
       <div class="field">
         <label>사유 (선택)</label>
         <textarea id="reason-input" placeholder="개인사유, 병원, 가족행사 등"></textarea>
@@ -189,13 +183,12 @@
         <input type="date" id="ot-date">
       </div>
 
-      <!-- 초과근무 -->
       <div id="ot-regular" style="display:none">
         <div class="info-box green">월~금 19:00부터 인정, 30분 단위, 최대 22:00까지</div>
         <div class="row">
           <div class="field">
             <label>퇴근 시각</label>
-            <input type="time" id="ot-end-time" value="20:00" min="19:00" max="22:00">
+            <input type="time" id="ot-end-time" value="20:00">
           </div>
           <div class="field">
             <label>시작 시각 (고정)</label>
@@ -204,7 +197,6 @@
         </div>
       </div>
 
-      <!-- 특별근무 -->
       <div id="ot-special" style="display:none">
         <div class="info-box green">토/일 특별근무, 최대 8h 인정</div>
         <div class="row">
@@ -244,7 +236,7 @@
 </div>
 
 <script>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbw3hmnTYIRpRZnRwcwHCi2eKMcozja3oOEEhhUURglHu1Q5f8uRVhPF7NHyDhDS4yFa/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwCnn2nR8byI9Jjw21AFSBRjzLHu9xIU3QooC9C7VQm-orXbHyHEmxj7xLpuoB6lFiY/exec';
 const YEONGA_DB = '1cdb227dfe764757a44f5d4f86fba2f9';
 const DAECHAE_DB = '9d2800b14a304da88c6f4b4099c84e4f';
 
@@ -252,33 +244,20 @@ var selectedType = null;
 var selectedHours = null;
 var selectedOTType = null;
 
-// 날짜 기본값
 var today = new Date();
 var todayStr = today.toISOString().split('T')[0];
 document.getElementById('date-input').value = todayStr;
 document.getElementById('ot-date').value = todayStr;
 
-// 계절별 퇴근시각
 function getOffTime(dateStr) {
   var month = dateStr ? new Date(dateStr).getMonth() + 1 : today.getMonth() + 1;
   return (month >= 3 && month <= 10) ? '18:00' : '17:00';
 }
+function timeToMin(t) { var [h,m] = t.split(':').map(Number); return h*60+m; }
+function minToTime(min) { return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0'); }
+function roundTo30(min) { return Math.floor(min/30)*30; }
 
-function timeToMin(t) {
-  var [h,m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-function minToTime(min) {
-  return String(Math.floor(min/60)).padStart(2,'0') + ':' + String(min%60).padStart(2,'0');
-}
-function roundTo30(min) {
-  return Math.floor(min / 30) * 30;
-}
-
-// 설정
-function loadConfig() {
-  document.getElementById('notion-token').value = localStorage.getItem('notion_token') || '';
-}
+function loadConfig() { document.getElementById('notion-token').value = localStorage.getItem('notion_token') || ''; }
 function saveConfig() {
   localStorage.setItem('notion_token', document.getElementById('notion-token').value.trim());
   var el = document.getElementById('config-saved');
@@ -298,46 +277,41 @@ function switchTab(tab) {
   if (tab === 'status') loadStatus();
 }
 
-// 현황 조회
-async function queryNotion(dbId) {
-  var token = localStorage.getItem('notion_token');
-  if (!token) throw new Error('no_token');
-  var res = await fetch(GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'query_notion', token: token, dbId: dbId })
-  });
-  if (!res.ok) throw new Error('조회 실패');
+// GAS를 통한 노션 조회
+async function gasCall(data) {
+  var res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data) });
+  if (!res.ok) throw new Error('서버 오류');
   return res.json();
 }
+
 function toDetail(hours) {
-  var days = Math.floor(hours / 8);
-  var remain = Math.round((hours % 8) * 100) / 100;
-  if (days > 0 && remain > 0) return days + '일 ' + remain + 'h';
-  if (days > 0) return days + '일';
-  return remain + 'h';
+  var days = Math.floor(hours/8);
+  var remain = Math.round((hours%8)*100)/100;
+  if (days>0 && remain>0) return days+'일 '+remain+'h';
+  if (days>0) return days+'일';
+  return remain+'h';
 }
+
 async function loadStatus() {
   var token = localStorage.getItem('notion_token');
-  if (!token) {
-    document.getElementById('status-content').innerHTML = '<div class="warn-box">⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.</div>';
-    return;
-  }
+  if (!token) { document.getElementById('status-content').innerHTML = '<div class="warn-box">⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.</div>'; return; }
   document.getElementById('status-content').innerHTML = '<div class="loading">불러오는 중...</div>';
   try {
-    var [yeongaData, daechaeData] = await Promise.all([queryNotion(YEONGA_DB), queryNotion(DAECHAE_DB)]);
+    var [yeongaData, daechaeData] = await Promise.all([
+      gasCall({action:'query_notion', token:token, dbId:YEONGA_DB}),
+      gasCall({action:'query_notion', token:token, dbId:DAECHAE_DB})
+    ]);
     var yeongaTotal = 0;
     yeongaData.results.forEach(p => {
-      var h = p.properties['시간']?.number || 0;
-      var t = p.properties['유형']?.select?.name || '';
-      if (t.includes('부여')) yeongaTotal += h; else if (h > 0) yeongaTotal -= h;
+      var h = p.properties['시간']?.number||0, t = p.properties['유형']?.select?.name||'';
+      if (t.includes('부여')) yeongaTotal+=h; else if (h>0) yeongaTotal-=h;
     });
     var daechaeTotal = 0;
     daechaeData.results.forEach(p => {
-      var h = p.properties['시간']?.number || 0;
-      var t = p.properties['구분']?.select?.name || '';
-      if (t === '적립') daechaeTotal += h; else if (t === '사용') daechaeTotal -= h;
+      var h = p.properties['시간']?.number||0, t = p.properties['구분']?.select?.name||'';
+      if (t==='적립') daechaeTotal+=h; else if (t==='사용') daechaeTotal-=h;
     });
-    daechaeTotal = Math.round(daechaeTotal * 100) / 100;
+    daechaeTotal = Math.round(daechaeTotal*100)/100;
     document.getElementById('status-content').innerHTML = `
       <div class="stat-grid">
         <div class="stat-card yeonga">
@@ -353,38 +327,32 @@ async function loadStatus() {
           <div class="stat-sub">${toDetail(daechaeTotal)}</div>
         </div>
       </div>`;
-    document.getElementById('updated').textContent = '마지막 업데이트: ' + new Date().toLocaleString('ko-KR');
+    document.getElementById('updated').textContent = '마지막 업데이트: '+new Date().toLocaleString('ko-KR');
   } catch(err) {
-    if (err.message === 'no_token') {
-      document.getElementById('status-content').innerHTML = '<div class="warn-box">⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.</div>';
-    } else {
-      document.getElementById('status-content').innerHTML = '<div class="result error" style="display:block">❌ ' + err.message + '</div>';
-    }
+    document.getElementById('status-content').innerHTML = '<div class="warn-box">⚙️ 설정 탭에서 노션 토큰을 확인해주세요.</div>';
   }
 }
 
-// 근태 입력
 function selectType(btn) {
   document.querySelectorAll('#tab-input .type-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   selectedType = btn.dataset.type;
-
   document.getElementById('input-fields').style.display = 'block';
   document.getElementById('jicham-hours').style.display = 'none';
   document.getElementById('jotoe-fields').style.display = 'none';
   document.getElementById('oechul-fields').style.display = 'none';
   document.getElementById('category-field').style.display = 'block';
 
-  if (selectedType === '지참') {
+  if (selectedType==='지참') {
     document.getElementById('jicham-hours').style.display = 'block';
     renderJichamHours();
-  } else if (selectedType === '조퇴') {
+  } else if (selectedType==='조퇴') {
     document.getElementById('jotoe-fields').style.display = 'block';
     updateJotoe();
-  } else if (selectedType === '외출') {
+  } else if (selectedType==='외출') {
     document.getElementById('oechul-fields').style.display = 'block';
     updateOechul();
-  } else if (selectedType === '연가') {
+  } else if (selectedType==='연가') {
     selectedHours = 8;
     document.getElementById('category-input').value = '연가';
     document.getElementById('category-field').style.display = 'none';
@@ -396,73 +364,67 @@ function renderJichamHours() {
   row.innerHTML = '';
   [3,4,5,6].forEach(h => {
     var btn = document.createElement('button');
-    btn.className = 'hour-btn' + (h === 3 ? ' selected' : '');
-    btn.textContent = h + 'h';
+    btn.className = 'hour-btn'+(h===3?' selected':'');
+    btn.textContent = h+'h';
     btn.onclick = () => {
-      document.querySelectorAll('#jicham-hours-row .hour-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      selectedHours = h;
-      updateJichamEnd();
+      document.querySelectorAll('#jicham-hours-row .hour-btn').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected'); selectedHours=h; updateJichamEnd();
     };
     row.appendChild(btn);
   });
-  selectedHours = 3;
-  updateJichamEnd();
+  selectedHours=3; updateJichamEnd();
 }
-
 function updateJichamEnd() {
-  var start = document.getElementById('jicham-start').value || '09:00';
-  var endMin = timeToMin(start) + selectedHours * 60;
-  document.getElementById('jicham-end').value = minToTime(endMin);
+  var start = document.getElementById('jicham-start').value||'09:00';
+  document.getElementById('jicham-end').value = minToTime(timeToMin(start)+selectedHours*60);
 }
 document.getElementById('jicham-start').addEventListener('change', updateJichamEnd);
 
 function updateJotoe() {
-  var dateStr = document.getElementById('date-input').value || todayStr;
+  var dateStr = document.getElementById('date-input').value||todayStr;
   var offTime = getOffTime(dateStr);
-  var month = new Date(dateStr).getMonth() + 1;
-  var season = (month >= 3 && month <= 10) ? '하계 (3~10월)' : '동계 (11~2월)';
-  document.getElementById('jotoe-info').textContent = season + ' 퇴근 기준: ' + offTime;
+  var month = new Date(dateStr).getMonth()+1;
+  var season = (month>=3&&month<=10)?'하계 (3~10월)':'동계 (11~2월)';
+  document.getElementById('jotoe-info').textContent = season+' 퇴근 기준: '+offTime;
   document.getElementById('jotoe-end').value = offTime;
-
-  var start = document.getElementById('jotoe-start').value || '16:00';
-  var diff = timeToMin(offTime) - timeToMin(start);
-  if (diff > 0) {
-    selectedHours = Math.round(diff / 60 * 10) / 10;
-    document.getElementById('jotoe-calc').innerHTML = '조퇴 시간: <strong>' + selectedHours + 'h</strong> (' + start + ' ~ ' + offTime + ')';
+  var start = document.getElementById('jotoe-start').value||'16:00';
+  var diff = timeToMin(offTime)-timeToMin(start);
+  if (diff>0) {
+    selectedHours = Math.round(diff/60*10)/10;
+    document.getElementById('jotoe-calc').innerHTML = '조퇴 시간: <strong>'+selectedHours+'h</strong> ('+start+' ~ '+offTime+')';
   } else {
     document.getElementById('jotoe-calc').innerHTML = '<span style="color:#c0392b">시작 시각이 퇴근 시각보다 늦습니다.</span>';
-    selectedHours = 0;
+    selectedHours=0;
   }
 }
 document.getElementById('jotoe-start').addEventListener('change', updateJotoe);
-document.getElementById('date-input').addEventListener('change', () => { if (selectedType === '조퇴') updateJotoe(); });
+document.getElementById('date-input').addEventListener('change', ()=>{ if(selectedType==='조퇴') updateJotoe(); });
 
 function updateOechul() {
-  var start = document.getElementById('oechul-start').value || '13:00';
-  var end = document.getElementById('oechul-end').value || '14:00';
-  var diff = timeToMin(end) - timeToMin(start);
-  if (diff > 0) {
-    selectedHours = Math.round(diff / 60 * 10) / 10;
-    document.getElementById('oechul-calc').innerHTML = '외출 시간: <strong>' + selectedHours + 'h</strong> (' + start + ' ~ ' + end + ')';
+  var start = document.getElementById('oechul-start').value||'13:00';
+  var end = document.getElementById('oechul-end').value||'14:00';
+  var diff = timeToMin(end)-timeToMin(start);
+  if (diff>0) {
+    selectedHours = Math.round(diff/60*10)/10;
+    document.getElementById('oechul-calc').innerHTML = '외출 시간: <strong>'+selectedHours+'h</strong> ('+start+' ~ '+end+')';
   } else {
-    document.getElementById('oechul-calc').innerHTML = '<span style="color:#c0392b">종료 시각이 시작 시각보다 빠릅니다.</span>';
-    selectedHours = 0;
+    document.getElementById('oechul-calc').innerHTML = '<span style="color:#c0392b">종료 시각을 확인해주세요.</span>';
+    selectedHours=0;
   }
 }
 document.getElementById('oechul-start').addEventListener('change', updateOechul);
 document.getElementById('oechul-end').addEventListener('change', updateOechul);
 
 async function submitForm() {
-  var NOTION_TOKEN = localStorage.getItem('notion_token');
-  if (!NOTION_TOKEN) { alert('⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.'); switchTab('config'); return; }
+  var token = localStorage.getItem('notion_token');
+  if (!token) { alert('⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.'); switchTab('config'); return; }
   if (!selectedType) { alert('근태 종류를 선택해주세요.'); return; }
   var date = document.getElementById('date-input').value;
   if (!date) { alert('날짜를 선택해주세요.'); return; }
-  if (!selectedHours || selectedHours <= 0) { alert('시간을 확인해주세요.'); return; }
+  if (!selectedHours||selectedHours<=0) { alert('시간을 확인해주세요.'); return; }
 
-  var category = selectedType === '연가' ? '연가' : document.getElementById('category-input').value;
-  var reason = document.getElementById('reason-input').value.trim() || '개인사유';
+  var category = selectedType==='연가' ? '연가' : document.getElementById('category-input').value;
+  var reason = document.getElementById('reason-input').value.trim()||'개인사유';
   var hours = selectedHours;
 
   document.getElementById('submit-btn').disabled = true;
@@ -470,141 +432,115 @@ async function submitForm() {
   document.getElementById('result').style.display = 'none';
 
   try {
-    var dbId = category === '연가' ? YEONGA_DB : DAECHAE_DB;
-    var notionProps = category === '연가'
-      ? { '내용':{title:[{text:{content:selectedType}}]}, '날짜':{date:{start:date}}, '유형':{select:{name:'연가'}}, '시간':{number:hours}, '사유':{rich_text:[{text:{content:reason}}]}, '소진구분':{select:{name:'2026신규분'}} }
-      : { '내용':{title:[{text:{content:selectedType}}]}, '날짜':{date:{start:date}}, '구분':{select:{name:'사용'}}, '시간':{number:hours}, '사유':{rich_text:[{text:{content:reason}}]} };
+    var dbId = category==='연가' ? YEONGA_DB : DAECHAE_DB;
+    var properties = category==='연가'
+      ? {'내용':{title:[{text:{content:selectedType}}]},'날짜':{date:{start:date}},'유형':{select:{name:'연가'}},'시간':{number:hours},'사유':{rich_text:[{text:{content:reason}}]},'소진구분':{select:{name:'2026신규분'}}}
+      : {'내용':{title:[{text:{content:selectedType}}]},'날짜':{date:{start:date}},'구분':{select:{name:'사용'}},'시간':{number:hours},'사유':{rich_text:[{text:{content:reason}}]}};
 
-    var notionRes = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + NOTION_TOKEN, 'Content-Type': 'application/json', 'Notion-Version': '2022-06-28' },
-      body: JSON.stringify({ parent:{database_id:dbId}, properties:notionProps })
-    });
-    if (!notionRes.ok) throw new Error('노션 등록 실패');
+    // GAS 통해서 노션 등록
+    await gasCall({action:'create_notion_page', token:token, dbId:dbId, properties:properties});
 
-    var calData = { title: selectedType + ' (' + reason + ')', description: selectedType + ' ' + hours + 'h (' + reason + ')' };
-    if (selectedType === '지참') {
-      calData.allDay = false;
-      calData.startTime = date + 'T' + document.getElementById('jicham-start').value + ':00+09:00';
-      calData.endTime = date + 'T' + document.getElementById('jicham-end').value + ':00+09:00';
-    } else if (selectedType === '조퇴') {
-      calData.allDay = false;
-      calData.startTime = date + 'T' + document.getElementById('jotoe-start').value + ':00+09:00';
-      calData.endTime = date + 'T' + document.getElementById('jotoe-end').value + ':00+09:00';
-    } else if (selectedType === '외출') {
-      calData.allDay = false;
-      calData.startTime = date + 'T' + document.getElementById('oechul-start').value + ':00+09:00';
-      calData.endTime = date + 'T' + document.getElementById('oechul-end').value + ':00+09:00';
+    // 캘린더 등록
+    var calData = {title:selectedType+' ('+reason+')', description:selectedType+' '+hours+'h ('+reason+')'};
+    if (selectedType==='지참') {
+      calData.allDay=false;
+      calData.startTime=date+'T'+document.getElementById('jicham-start').value+':00+09:00';
+      calData.endTime=date+'T'+document.getElementById('jicham-end').value+':00+09:00';
+    } else if (selectedType==='조퇴') {
+      calData.allDay=false;
+      calData.startTime=date+'T'+document.getElementById('jotoe-start').value+':00+09:00';
+      calData.endTime=date+'T'+document.getElementById('jotoe-end').value+':00+09:00';
+    } else if (selectedType==='외출') {
+      calData.allDay=false;
+      calData.startTime=date+'T'+document.getElementById('oechul-start').value+':00+09:00';
+      calData.endTime=date+'T'+document.getElementById('oechul-end').value+':00+09:00';
     } else {
-      calData.allDay = true;
-      calData.date = date + 'T00:00:00';
+      calData.allDay=true; calData.date=date+'T00:00:00';
     }
-
-    await fetch(GAS_URL, { method:'POST', body:JSON.stringify(calData) });
+    await gasCall(calData);
 
     var el = document.getElementById('result');
-    el.className = 'result success';
-    el.textContent = '✅ ' + selectedType + ' ' + hours + 'h 등록 완료!\n노션과 캘린더에 기록되었습니다.';
-    el.style.display = 'block';
+    el.className='result success';
+    el.textContent='✅ '+selectedType+' '+hours+'h 등록 완료!\n노션과 캘린더에 기록되었습니다.';
+    el.style.display='block';
   } catch(err) {
     var el = document.getElementById('result');
-    el.className = 'result error';
-    el.textContent = '❌ 오류: ' + err.message;
-    el.style.display = 'block';
+    el.className='result error';
+    el.textContent='❌ 오류: '+err.message;
+    el.style.display='block';
   }
-  document.getElementById('submit-btn').disabled = false;
-  document.getElementById('loading-msg').style.display = 'none';
+  document.getElementById('submit-btn').disabled=false;
+  document.getElementById('loading-msg').style.display='none';
 }
 
 // 초과근무
 function selectOT(btn) {
-  document.querySelectorAll('#tab-overtime .type-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('#tab-overtime .type-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
   selectedOTType = btn.dataset.ot;
-  document.getElementById('ot-fields').style.display = 'block';
-  document.getElementById('ot-regular').style.display = selectedOTType === '초과근무' ? 'block' : 'none';
-  document.getElementById('ot-special').style.display = selectedOTType === '특별근무' ? 'block' : 'none';
+  document.getElementById('ot-fields').style.display='block';
+  document.getElementById('ot-regular').style.display=selectedOTType==='초과근무'?'block':'none';
+  document.getElementById('ot-special').style.display=selectedOTType==='특별근무'?'block':'none';
   updateOTCalc();
 }
 
 function updateOTCalc() {
   if (!selectedOTType) return;
   var calcEl = document.getElementById('ot-calc');
-
-  if (selectedOTType === '초과근무') {
-    var endTime = document.getElementById('ot-end-time').value || '20:00';
-    var endMin = timeToMin(endTime);
-    var startMin = timeToMin('19:00');
-    if (endMin > timeToMin('22:00')) endMin = timeToMin('22:00');
-    if (endMin <= startMin) { calcEl.innerHTML = '<span style="color:#c0392b">19:00 이후 시각을 입력해주세요.</span>'; return; }
-    var workMin = roundTo30(endMin - startMin);
-    var workH = workMin / 60;
-    var earnH = Math.round(workH * 1.5 * 100) / 100;
-    calcEl.innerHTML = '실근무: <strong>' + workH + 'h</strong> → 적립: <strong>' + earnH + 'h</strong> (×1.5배)';
-    calcEl.dataset.earn = earnH;
-    calcEl.dataset.work = workH;
+  if (selectedOTType==='초과근무') {
+    var endMin = Math.min(timeToMin(document.getElementById('ot-end-time').value||'20:00'), timeToMin('22:00'));
+    var workMin = roundTo30(endMin-timeToMin('19:00'));
+    if (workMin<=0) { calcEl.innerHTML='<span style="color:#c0392b">19:00 이후 시각을 입력해주세요.</span>'; return; }
+    var workH = workMin/60, earnH = Math.round(workH*1.5*100)/100;
+    calcEl.innerHTML='실근무: <strong>'+workH+'h</strong> → 적립: <strong>'+earnH+'h</strong> (×1.5배)';
+    calcEl.dataset.earn=earnH;
   } else {
-    var spStart = document.getElementById('sp-start').value || '09:00';
-    var spEnd = document.getElementById('sp-end').value || '18:00';
-    var diffMin = timeToMin(spEnd) - timeToMin(spStart);
-    if (diffMin <= 0) { calcEl.innerHTML = '<span style="color:#c0392b">종료 시각을 확인해주세요.</span>'; return; }
-    var workH2 = Math.min(diffMin / 60, 8);
-    workH2 = Math.round(workH2 * 100) / 100;
-    var earnH2 = Math.round(workH2 * 1.5 * 100) / 100;
-    calcEl.innerHTML = '실근무: <strong>' + workH2 + 'h</strong> → 적립: <strong>' + earnH2 + 'h</strong> (×1.5배)';
-    calcEl.dataset.earn = earnH2;
-    calcEl.dataset.work = workH2;
+    var diffMin = timeToMin(document.getElementById('sp-end').value||'18:00')-timeToMin(document.getElementById('sp-start').value||'09:00');
+    if (diffMin<=0) { calcEl.innerHTML='<span style="color:#c0392b">종료 시각을 확인해주세요.</span>'; return; }
+    var workH2=Math.min(Math.round(diffMin/60*100)/100,8), earnH2=Math.round(workH2*1.5*100)/100;
+    calcEl.innerHTML='실근무: <strong>'+workH2+'h</strong> → 적립: <strong>'+earnH2+'h</strong> (×1.5배)';
+    calcEl.dataset.earn=earnH2;
   }
 }
-
 document.getElementById('ot-end-time').addEventListener('change', updateOTCalc);
 document.getElementById('sp-start').addEventListener('change', updateOTCalc);
 document.getElementById('sp-end').addEventListener('change', updateOTCalc);
 
 async function submitOT() {
-  var NOTION_TOKEN = localStorage.getItem('notion_token');
-  if (!NOTION_TOKEN) { alert('⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.'); switchTab('config'); return; }
+  var token = localStorage.getItem('notion_token');
+  if (!token) { alert('⚙️ 설정 탭에서 노션 토큰을 먼저 입력해주세요.'); switchTab('config'); return; }
   if (!selectedOTType) { alert('근무 종류를 선택해주세요.'); return; }
   var date = document.getElementById('ot-date').value;
   if (!date) { alert('날짜를 선택해주세요.'); return; }
+  var earnH = parseFloat(document.getElementById('ot-calc').dataset.earn||0);
+  if (!earnH||earnH<=0) { alert('시간을 확인해주세요.'); return; }
+  var reason = document.getElementById('ot-reason').value.trim()||selectedOTType;
 
-  var calcEl = document.getElementById('ot-calc');
-  var earnH = parseFloat(calcEl.dataset.earn || 0);
-  if (!earnH || earnH <= 0) { alert('시간을 확인해주세요.'); return; }
-
-  var reason = document.getElementById('ot-reason').value.trim() || selectedOTType;
-
-  document.getElementById('ot-submit-btn').disabled = true;
-  document.getElementById('ot-loading-msg').style.display = 'block';
-  document.getElementById('ot-result').style.display = 'none';
+  document.getElementById('ot-submit-btn').disabled=true;
+  document.getElementById('ot-loading-msg').style.display='block';
+  document.getElementById('ot-result').style.display='none';
 
   try {
-    var notionProps = {
-      '내용': {title:[{text:{content:selectedOTType}}]},
-      '날짜': {date:{start:date}},
-      '구분': {select:{name:'적립'}},
-      '시간': {number:earnH},
-      '사유': {rich_text:[{text:{content:reason}}]}
+    var properties = {
+      '내용':{title:[{text:{content:selectedOTType}}]},
+      '날짜':{date:{start:date}},
+      '구분':{select:{name:'적립'}},
+      '시간':{number:earnH},
+      '사유':{rich_text:[{text:{content:reason}}]}
     };
-    var notionRes = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + NOTION_TOKEN, 'Content-Type': 'application/json', 'Notion-Version': '2022-06-28' },
-      body: JSON.stringify({ parent:{database_id:DAECHAE_DB}, properties:notionProps })
-    });
-    if (!notionRes.ok) throw new Error('노션 등록 실패');
-
+    await gasCall({action:'create_notion_page', token:token, dbId:DAECHAE_DB, properties:properties});
     var el = document.getElementById('ot-result');
-    el.className = 'result success';
-    el.textContent = '✅ ' + selectedOTType + ' ' + earnH + 'h 적립 완료!\n대체휴무 내역에 기록되었습니다.';
-    el.style.display = 'block';
+    el.className='result success';
+    el.textContent='✅ '+selectedOTType+' '+earnH+'h 적립 완료!\n대체휴무 내역에 기록되었습니다.';
+    el.style.display='block';
   } catch(err) {
     var el = document.getElementById('ot-result');
-    el.className = 'result error';
-    el.textContent = '❌ 오류: ' + err.message;
-    el.style.display = 'block';
+    el.className='result error';
+    el.textContent='❌ 오류: '+err.message;
+    el.style.display='block';
   }
-  document.getElementById('ot-submit-btn').disabled = false;
-  document.getElementById('ot-loading-msg').style.display = 'none';
+  document.getElementById('ot-submit-btn').disabled=false;
+  document.getElementById('ot-loading-msg').style.display='none';
 }
 
 loadStatus();
