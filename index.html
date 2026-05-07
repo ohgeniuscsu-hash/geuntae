@@ -38,7 +38,6 @@
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #4A90D9; }
   .field textarea { resize: none; height: 70px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .hours-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
   .hour-btn { border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 8px 16px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 500; color: #444; transition: all 0.15s; }
   .hour-btn:hover { border-color: #aaa; }
@@ -54,6 +53,7 @@
   .loading { text-align: center; color: #aaa; font-size: 13px; padding: 2rem 0; }
   .warn-box { background: #fff3cd; color: #856404; border-radius: 8px; padding: 12px; font-size: 13px; margin-bottom: 1rem; }
   .info-box { background: #EBF3FC; color: #1a5fa8; border-radius: 8px; padding: 10px 12px; font-size: 12px; margin-bottom: 1rem; }
+  input[type="time"]:read-only { background: #f5f5f5; color: #888; }
 </style>
 </head>
 <body>
@@ -78,66 +78,71 @@
   <div id="tab-input" style="display:none">
     <div class="section-label">근태 종류</div>
     <div class="type-grid">
-      <button class="type-btn" data-type="지참" data-hours="3" data-category="대체휴무" onclick="selectType(this)">
-        <span class="label">지참</span><span class="sub">오전 3h</span>
+      <button class="type-btn" data-type="지참" data-category="대체휴무" onclick="selectType(this)">
+        <span class="label">지참</span><span class="sub">3h~</span>
       </button>
-      <button class="type-btn" data-type="조퇴" data-hours="1" data-category="대체휴무" onclick="selectType(this)">
+      <button class="type-btn" data-type="조퇴" data-category="대체휴무" onclick="selectType(this)">
         <span class="label">조퇴</span><span class="sub">1h~</span>
       </button>
-      <button class="type-btn" data-type="외출" data-hours="1" data-category="대체휴무" onclick="selectType(this)">
+      <button class="type-btn" data-type="외출" data-category="대체휴무" onclick="selectType(this)">
         <span class="label">외출</span><span class="sub">1h~</span>
       </button>
-      <button class="type-btn" data-type="연가(반차)" data-hours="4" data-category="연가" onclick="selectType(this)">
+      <button class="type-btn" data-type="연가(반차)" data-category="연가" onclick="selectType(this)">
         <span class="label">연가 반차</span><span class="sub">4h</span>
       </button>
-      <button class="type-btn" data-type="연가(종일)" data-hours="8" data-category="연가" onclick="selectType(this)">
+      <button class="type-btn" data-type="연가(종일)" data-category="연가" onclick="selectType(this)">
         <span class="label">연가 종일</span><span class="sub">8h</span>
       </button>
-      <button class="type-btn" data-type="대체휴무" data-hours="8" data-category="대체휴무" onclick="selectType(this)">
+      <button class="type-btn" data-type="대체휴무" data-category="대체휴무" onclick="selectType(this)">
         <span class="label">대체휴무</span><span class="sub">자유설정</span>
       </button>
     </div>
 
-    <!-- 시간 선택 (조퇴/외출/대체휴무) -->
+    <hr class="divider">
+
+    <!-- 1. 날짜 -->
+    <div class="field">
+      <label>날짜</label>
+      <input type="date" id="date-input">
+    </div>
+
+    <!-- 2. 시간 선택 (시간 수) -->
     <div id="hours-section" style="display:none">
-      <div class="section-label">시간</div>
+      <div class="section-label" id="hours-label">시간</div>
       <div class="hours-row" id="hours-row"></div>
     </div>
 
-    <!-- 시작 시간 (조퇴/외출) -->
+    <!-- 3. 시각 설정 (지참/조퇴/외출) -->
     <div id="starttime-section" style="display:none">
       <div class="info-box" id="starttime-info"></div>
       <div class="row">
         <div class="field">
-          <label>시작 시간</label>
-          <input type="time" id="start-time-input" value="09:00">
+          <label>시작 시각</label>
+          <input type="time" id="start-time-input">
         </div>
         <div class="field">
-          <label>종료 시간 (자동)</label>
-          <input type="time" id="end-time-input" readonly style="background:#f5f5f5; color:#888;">
+          <label>종료 시각 (자동)</label>
+          <input type="time" id="end-time-input" readonly>
         </div>
       </div>
     </div>
 
-    <hr class="divider">
-    <div class="row">
-      <div class="field">
-        <label>날짜</label>
-        <input type="date" id="date-input">
-      </div>
-      <div class="field">
-        <label>구분</label>
-        <select id="category-input">
-          <option value="대체휴무">대체휴무</option>
-          <option value="연가">연가</option>
-        </select>
-      </div>
+    <!-- 4. 구분 -->
+    <div class="field" id="category-section" style="display:none">
+      <label>구분</label>
+      <select id="category-input">
+        <option value="대체휴무">대체휴무</option>
+        <option value="연가">연가</option>
+      </select>
     </div>
-    <div class="field">
+
+    <!-- 5. 사유 -->
+    <div class="field" id="reason-section" style="display:none">
       <label>사유 (선택)</label>
       <textarea id="reason-input" placeholder="개인사유, 병원, 가족행사 등"></textarea>
     </div>
-    <button class="submit-btn" id="submit-btn" onclick="submitForm()">기록하기</button>
+
+    <button class="submit-btn" id="submit-btn" onclick="submitForm()" style="display:none">기록하기</button>
     <div class="loading-msg" id="loading-msg">⏳ 노션 · 캘린더에 기록 중...</div>
     <div class="result" id="result"></div>
   </div>
@@ -160,6 +165,7 @@ const DAECHAE_DB = '9d2800b14a304da88c6f4b4099c84e4f';
 
 var selectedType = null;
 var selectedHours = null;
+
 var today = new Date();
 document.getElementById('date-input').value = today.toISOString().split('T')[0];
 
@@ -266,42 +272,76 @@ function updateEndTime() {
   document.getElementById('end-time-input').value = String(endH).padStart(2,'0') + ':' + String(endM).padStart(2,'0');
 }
 
+function showBottomFields() {
+  document.getElementById('category-section').style.display = 'block';
+  document.getElementById('reason-section').style.display = 'block';
+  document.getElementById('submit-btn').style.display = 'block';
+}
+
 function selectType(btn) {
   document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   selectedType = btn.dataset.type;
-  var defaultHours = parseInt(btn.dataset.hours);
   document.getElementById('category-input').value = btn.dataset.category;
 
   var hoursSection = document.getElementById('hours-section');
   var starttimeSection = document.getElementById('starttime-section');
 
   if (selectedType === '지참') {
-    hoursSection.style.display = 'none';
-    starttimeSection.style.display = 'none';
-    selectedHours = 3;
-  } else if (selectedType === '연가(반차)' || selectedType === '연가(종일)') {
-    hoursSection.style.display = 'none';
-    starttimeSection.style.display = 'none';
-    selectedHours = defaultHours;
-  } else if (selectedType === '조퇴' || selectedType === '외출') {
     hoursSection.style.display = 'block';
+    document.getElementById('hours-label').textContent = '시간 (기본 3h)';
     starttimeSection.style.display = 'block';
-    document.getElementById('starttime-info').textContent =
-      selectedType === '조퇴' ? '조퇴 시작 시간과 퇴근까지 시간을 설정하세요.' : '외출 시작 시간과 복귀까지 시간을 설정하세요.';
-    renderHours(selectedType, defaultHours);
+    document.getElementById('starttime-info').textContent = '지참 시작 시각을 설정하세요. (보통 09:00)';
+    document.getElementById('start-time-input').value = '09:00';
+    renderHours('지참', 3);
     updateEndTime();
+
+  } else if (selectedType === '조퇴') {
+    hoursSection.style.display = 'block';
+    document.getElementById('hours-label').textContent = '시간';
+    starttimeSection.style.display = 'block';
+    document.getElementById('starttime-info').textContent = '조퇴 시작 시각을 설정하세요.';
+    document.getElementById('start-time-input').value = '17:00';
+    renderHours('조퇴외출', 1);
+    updateEndTime();
+
+  } else if (selectedType === '외출') {
+    hoursSection.style.display = 'block';
+    document.getElementById('hours-label').textContent = '시간';
+    starttimeSection.style.display = 'block';
+    document.getElementById('starttime-info').textContent = '외출 시작 시각을 설정하세요.';
+    document.getElementById('start-time-input').value = '13:00';
+    renderHours('조퇴외출', 1);
+    updateEndTime();
+
+  } else if (selectedType === '연가(반차)') {
+    hoursSection.style.display = 'none';
+    starttimeSection.style.display = 'none';
+    selectedHours = 4;
+
+  } else if (selectedType === '연가(종일)') {
+    hoursSection.style.display = 'none';
+    starttimeSection.style.display = 'none';
+    selectedHours = 8;
+
   } else if (selectedType === '대체휴무') {
     hoursSection.style.display = 'block';
+    document.getElementById('hours-label').textContent = '시간';
     starttimeSection.style.display = 'none';
-    renderHours(selectedType, defaultHours);
+    renderHours('대체휴무', 8);
   }
+
+  showBottomFields();
 }
 
 function renderHours(type, defaultH) {
   var row = document.getElementById('hours-row');
   row.innerHTML = '';
-  var options = type === '대체휴무' ? [4,8] : [1,2,3,4];
+  var options;
+  if (type === '지참') options = [3,4,5,6];
+  else if (type === '대체휴무') options = [4,8];
+  else options = [1,2,3,4];
+
   selectedHours = defaultH;
 
   options.forEach(h => {
@@ -363,14 +403,9 @@ async function submitForm() {
     });
     if (!notionRes.ok) throw new Error('노션 등록 실패 (' + notionRes.status + ')');
 
-    // 캘린더 데이터 구성
     var calData = { title: selectedType+' ('+reason+')', description: selectedType+' '+hours+'h ('+reason+')' };
 
-    if (selectedType === '지참') {
-      calData.allDay = false;
-      calData.startTime = date + 'T09:00:00+09:00';
-      calData.endTime = date + 'T12:00:00+09:00';
-    } else if (selectedType === '조퇴' || selectedType === '외출') {
+    if (selectedType === '지참' || selectedType === '조퇴' || selectedType === '외출') {
       var startTime = document.getElementById('start-time-input').value;
       var endTime = document.getElementById('end-time-input').value;
       calData.allDay = false;
